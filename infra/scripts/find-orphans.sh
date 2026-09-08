@@ -103,6 +103,19 @@ if is_shell "$SERVICE_STATUS"; then
   if aws s3api head-bucket --bucket "$alb_logs" >/dev/null 2>&1; then
     report "s3://$alb_logs" "aws s3 rb s3://$alb_logs --force"
   fi
+
+  log_group="/langflow/${ENV_NAME}/service"
+  if [ -n "$(aws logs describe-log-groups --log-group-name-prefix "$log_group" \
+      --query "logGroups[?logGroupName=='$log_group'].logGroupName | [0]" --output text 2>/dev/null \
+      | grep -v '^None$')" ]; then
+    report "log group $log_group" "aws logs delete-log-group --log-group-name $log_group"
+  fi
+
+  if [ -n "$(aws cloudwatch list-dashboards \
+      --query "DashboardEntries[?DashboardName=='langflow-${ENV_NAME}'].DashboardName | [0]" \
+      --output text 2>/dev/null | grep -v '^None$')" ]; then
+    report "dashboard langflow-${ENV_NAME}" "aws cloudwatch delete-dashboards --dashboard-names langflow-${ENV_NAME}"
+  fi
 else
   echo "$SERVICE_STACK is $SERVICE_STATUS — live, and its resources are not listed."
 fi

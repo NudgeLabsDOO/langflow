@@ -142,7 +142,12 @@ export class ServiceStack extends Stack {
       logGroupName: `/langflow/${config.envName}/service`,
       retention: config.logRetention,
       encryptionKey,
-      removalPolicy: config.removalPolicy,
+      // Destroyed with the stack, like everything else here. The name is
+      // deterministic, so a retained log group outlives a rollback and then
+      // blocks the next create — CloudFormation will not adopt a resource it
+      // does not own. Retention already bounds how much history exists; ship
+      // logs downstream if they need to survive the stack.
+      removalPolicy: RemovalPolicy.DESTROY,
     });
 
     const taskDefinition = new ecs.FargateTaskDefinition(this, "TaskDefinition", {

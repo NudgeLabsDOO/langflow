@@ -300,6 +300,18 @@ describe("service", () => {
     );
   });
 
+  it("retains nothing, so the stateless stack can always be recreated", () => {
+    // Every retained resource in this stack has a deterministic name, so it
+    // survives a rollback and then blocks the next create with a bare
+    // ResourceExistenceCheck. State belongs in the data stack; this one must
+    // stay disposable.
+    const { service } = synth();
+    const retained = Object.entries(service.toJSON().Resources as Record<string, any>)
+      .filter(([, resource]) => resource.DeletionPolicy === "Retain")
+      .map(([logicalId]) => logicalId);
+    expect(retained).toEqual([]);
+  });
+
   it("leaves the load balancer deletable so a failed create can roll back", () => {
     const { service } = synth();
     service.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
