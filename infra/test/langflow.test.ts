@@ -281,6 +281,34 @@ describe("service", () => {
     expect(rendered).toContain("$DB_PASSWORD");
   });
 
+  it("lets the execution role decrypt secrets through Secrets Manager", () => {
+    // Regression guard. The data-tier KMS key is imported by ARN to keep the
+    // stacks acyclic, and on an imported key CDK's implicit grant from
+    // Secret.grantRead silently does nothing — tasks then fail to start with
+    // "Access to KMS is not allowed" and only at runtime.
+    const { service } = synth();
+    const policies = service.findResources("AWS::IAM::Policy");
+    const executionStatements = Object.entries(policies)
+      .filter(([logicalId]) => logicalId.includes("ExecutionRole"))
+      .flatMap(([, policy]: [string, any]) => policy.Properties.PolicyDocument.Statement);
+    const kmsStatement = executionStatements.find((statement: any) =>
+      JSON.stringify(statement.Action).includes("kms:Decrypt"),
+    );
+    expect(kmsStatement).toBeDefined();
+    expect(kmsStatement.Condition.StringEquals["kms:ViaService"]).toBe(
+      "secretsmanager.eu-central-1.amazonaws.com",
+    );
+  });
+
+  it("leaves the load balancer deletable so a failed create can roll back", () => {
+    const { service } = synth();
+    service.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
+      LoadBalancerAttributes: Match.arrayWith([
+        { Key: "deletion_protection.enabled", Value: "false" },
+      ]),
+    });
+  });
+
   it("mounts the config directory from EFS", () => {
     const { service } = synth();
     service.hasResourceProperties("AWS::ECS::TaskDefinition", {

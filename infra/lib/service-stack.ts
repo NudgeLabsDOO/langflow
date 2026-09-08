@@ -116,8 +116,14 @@ export class ServiceStack extends Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
       lifecycleRules: [{ id: "expire", expiration: Duration.days(90) }],
-      removalPolicy: config.removalPolicy,
-      autoDeleteObjects: config.removalPolicy !== RemovalPolicy.RETAIN,
+      // Destroyed with the stack, even in prod. This is the stateless stack and
+      // it has to stay freely recreatable: a retained bucket survives a rollback
+      // and then blocks the next create, because the name is deterministic and
+      // CloudFormation refuses to adopt a resource it does not own. These are
+      // short-lived operational logs — the lifecycle rule already caps them at
+      // 90 days — not business data, which lives in the data stack.
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
     });
 
     const hostedZone = route53.HostedZone.fromLookup(this, "HostedZone", {
@@ -171,6 +177,33 @@ export class ServiceStack extends Stack {
 
     fileBucket.grantReadWrite(taskDefinition.taskRole);
     encryptionKey.grantEncryptDecrypt(taskDefinition.taskRole);
+
+    // The execution role's KMS grant has to be written by hand.
+    //
+    // `Secret.grantRead` normally covers it, but it grants decrypt to a
+    // `kms.ViaServicePrincipal` wrapper rather than to the role itself. That
+    // has nowhere to land on an *imported* key: there is no principal policy
+    // for a bare principal, and an imported key's policy cannot be edited. The
+    // grant silently no-ops, and the failure surfaces only at runtime, as
+    // "ResourceInitializationError ... AccessDeniedException: Access to KMS is
+    // not allowed" when the agent tries to pull the secret.
+    //
+    // The key policy delegates kms:* to the account root, so a principal-side
+    // grant is sufficient. The ViaService condition keeps it to exactly what
+    // CDK would have written: decryption performed by Secrets Manager, not
+    // direct use of the key by the execution role.
+    taskDefinition.addToExecutionRolePolicy(
+      new iam.PolicyStatement({
+        sid: "DecryptSecretsManagerSecrets",
+        actions: ["kms:Decrypt", "kms:DescribeKey"],
+        resources: [props.encryptionKeyArn],
+        conditions: {
+          StringEquals: {
+            "kms:ViaService": `secretsmanager.${this.region}.amazonaws.com`,
+          },
+        },
+      }),
+    );
     taskDefinition.taskRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         actions: [
@@ -285,7 +318,11 @@ export class ServiceStack extends Stack {
       idleTimeout: Duration.seconds(600),
       dropInvalidHeaderFields: true,
       http2Enabled: true,
-      deletionProtection: config.removalPolicy === RemovalPolicy.RETAIN,
+      // Deliberately off. The load balancer holds no state — the DNS record and
+      // the data tier are what matter — and enabling it turns any failed create
+      // into a stuck ROLLBACK_FAILED, because CloudFormation cannot delete the
+      // half-built stack it just made.
+      deletionProtection: false,
     });
     this.loadBalancer.logAccessLogs(accessLogBucket, `alb/${config.envName}`);
 
