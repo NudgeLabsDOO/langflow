@@ -82,6 +82,8 @@ src/
 ├── langflow-core/         # Usable provider-free Langflow distribution
 ├── bundles/               # Curated provider integrations
 └── lfx/                   # Lightweight executor and shared primitives
+
+infra/                     # AWS CDK (TypeScript) deployment for Nudge Labs
 ```
 
 ### Key Packages

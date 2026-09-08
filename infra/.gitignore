@@ -1,0 +1,19 @@
+node_modules/
+cdk.out/
+.cdk.staging/
+coverage/
+.env
+
+# The repository root .gitignore carries a blanket `lib/` (a Python packaging
+# convention). Re-include this one: it holds the CDK stack definitions.
+!/lib/
+
+# Compiled output from `tsc`. The Lambda sources under lambda/ are plain
+# JavaScript on purpose (no bundler) and must stay tracked.
+/bin/*.js
+/bin/*.d.ts
+/lib/**/*.js
+/lib/**/*.d.ts
+/test/**/*.js
+/test/**/*.d.ts
+*.js.map

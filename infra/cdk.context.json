@@ -1,0 +1,11 @@
+{
+  "availability-zones:account=447237717633:region=eu-central-1": [
+    "eu-central-1a",
+    "eu-central-1b",
+    "eu-central-1c"
+  ],
+  "hosted-zone:account=447237717633:domainName=nudge-platforms.com:region=eu-central-1": {
+    "Id": "/hostedzone/Z06341873QY47D6LWX87L",
+    "Name": "nudge-platforms.com."
+  }
+}

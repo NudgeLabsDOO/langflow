@@ -1,4 +1,4 @@
-.PHONY: all init format_backend format lint build backend backend_base install_backend setup_env run_backend dev help tests coverage clean_python_cache clean_npm_cache clean_frontend_build clean_all run_clic load_test_setup load_test_setup_basic load_test_list_flows load_test_run load_test_langflow_quick load_test_stress load_test_example load_test_clean load_test_remote_setup load_test_remote_run load_test_help docs docs_build docs_install api_examples_local api_examples_local_syntax
+.PHONY: all init format_backend format lint build backend backend_base install_backend setup_env run_backend dev help tests coverage clean_python_cache clean_npm_cache clean_frontend_build clean_all run_clic load_test_setup load_test_setup_basic load_test_list_flows load_test_run load_test_langflow_quick load_test_stress load_test_example load_test_clean load_test_remote_setup load_test_remote_run load_test_help docs docs_build docs_install api_examples_local api_examples_local_syntax infra_install infra_test infra_synth infra_diff infra_deploy infra_deploy_service infra_destroy
 
 # Configurations
 VERSION=$(shell grep "^version" pyproject.toml | sed 's/.*\"\(.*\)\"$$/\1/')
@@ -1126,6 +1126,36 @@ api_examples_local: ## run docs API sample files against a local Langflow server
 api_examples_local_syntax: ## syntax-check docs API sample files locally without execution
 	@echo "$(GREEN)Running docs API example syntax checks locally...$(NC)"
 	@SUITES="$(suites)" EXECUTE_MODE=false ./scripts/test-api-examples-local.sh
+
+######################
+# INFRASTRUCTURE (AWS CDK)
+######################
+
+# Nudge Labs deployment. See infra/README.md for one-time setup.
+# Override the target environment with `env=dev`.
+env ?= prod
+
+infra_install: ## install the AWS CDK dependencies
+	@echo "$(GREEN)Installing CDK dependencies...$(NC)"
+	@cd infra && npm ci
+
+infra_test: ## run the infrastructure unit tests
+	@cd infra && npm test
+
+infra_synth: ## synthesise the CloudFormation templates
+	@cd infra && npx cdk synth -c env=$(env)
+
+infra_diff: ## diff the deployed stacks against this checkout
+	@cd infra && npx cdk diff --all -c env=$(env)
+
+infra_deploy: ## build the image and deploy every stack
+	@cd infra && npx cdk deploy --all -c env=$(env) --require-approval broadening
+
+infra_deploy_service: ## deploy only the application stack (skips data and auth)
+	@cd infra && npx cdk deploy Langflow-$(env)-Service -c env=$(env) --require-approval broadening
+
+infra_destroy: ## tear down the environment (retained data is kept for prod)
+	@cd infra && npx cdk destroy --all -c env=$(env)
 
 ######################
 # INCLUDE FRONTEND MAKEFILE
