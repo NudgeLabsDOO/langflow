@@ -47,6 +47,8 @@ const testConfig: LangflowEnvironment = {
   redisReplicas: 1,
   useRedisCache: true,
   githubRepository: "NudgeLabsDOO/langflow",
+  githubOwnerId: "121947197",
+  githubRepositoryId: "1361503006",
   githubBranch: "feature/prod-nl-iac",
   githubEnvironment: "production",
   logRetention: RetentionDays.ONE_MONTH,
@@ -312,8 +314,12 @@ describe("cicd roles", () => {
             Condition: {
               StringEquals: {
                 "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                "token.actions.githubusercontent.com:sub":
+                // Both spellings, because GitHub's immutable-subject rollout
+                // decides which one a token actually carries.
+                "token.actions.githubusercontent.com:sub": [
                   "repo:NudgeLabsDOO/langflow:environment:production",
+                  "repo:NudgeLabsDOO@121947197/langflow@1361503006:environment:production",
+                ],
               },
             },
           }),
@@ -331,8 +337,10 @@ describe("cicd roles", () => {
           Match.objectLike({
             Condition: {
               StringEquals: Match.objectLike({
-                "token.actions.githubusercontent.com:sub":
+                "token.actions.githubusercontent.com:sub": [
                   "repo:NudgeLabsDOO/langflow:ref:refs/heads/feature/prod-nl-iac",
+                  "repo:NudgeLabsDOO@121947197/langflow@1361503006:ref:refs/heads/feature/prod-nl-iac",
+                ],
               }),
             },
           }),

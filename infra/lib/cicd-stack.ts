@@ -40,6 +40,24 @@ export class CicdStack extends Stack {
       `arn:aws:iam::${this.account}:oidc-provider/${GITHUB_OIDC_HOST}`,
     );
 
+    /**
+     * Both spellings of the OIDC subject for one job context.
+     *
+     * GitHub is rolling out immutable subject claims, which put numeric owner
+     * and repository ids into `sub`. The form a token carries is decided by a
+     * per-repository flag outside this codebase, and a `StringEquals` on the
+     * wrong one fails closed with an unhelpful "Not authorized to perform
+     * sts:AssumeRoleWithWebIdentity". Listing both exact strings tolerates the
+     * migration in either direction without resorting to a wildcard.
+     */
+    const subjects = (suffix: string): string[] => {
+      const [owner, name] = config.githubRepository.split("/");
+      return [
+        `repo:${config.githubRepository}:${suffix}`,
+        `repo:${owner}@${config.githubOwnerId}/${name}@${config.githubRepositoryId}:${suffix}`,
+      ];
+    };
+
     const bootstrapRoles = `arn:aws:iam::${this.account}:role/cdk-${BOOTSTRAP_QUALIFIER}-*-${this.account}-${this.region}`;
     const bootstrapVersionParameter = `arn:aws:ssm:${this.region}:${this.account}:parameter/cdk-bootstrap/${BOOTSTRAP_QUALIFIER}/version`;
 
@@ -50,7 +68,7 @@ export class CicdStack extends Stack {
       assumedBy: new iam.WebIdentityPrincipal(provider.openIdConnectProviderArn, {
         StringEquals: {
           [`${GITHUB_OIDC_HOST}:aud`]: "sts.amazonaws.com",
-          [`${GITHUB_OIDC_HOST}:sub`]: `repo:${config.githubRepository}:environment:${config.githubEnvironment}`,
+          [`${GITHUB_OIDC_HOST}:sub`]: subjects(`environment:${config.githubEnvironment}`),
         },
       }),
       // A cold first deploy builds the image and waits on Aurora; an hour is
@@ -83,7 +101,7 @@ export class CicdStack extends Stack {
       assumedBy: new iam.WebIdentityPrincipal(provider.openIdConnectProviderArn, {
         StringEquals: {
           [`${GITHUB_OIDC_HOST}:aud`]: "sts.amazonaws.com",
-          [`${GITHUB_OIDC_HOST}:sub`]: `repo:${config.githubRepository}:ref:refs/heads/${config.githubBranch}`,
+          [`${GITHUB_OIDC_HOST}:sub`]: subjects(`ref:refs/heads/${config.githubBranch}`),
         },
       }),
       maxSessionDuration: Duration.hours(1),

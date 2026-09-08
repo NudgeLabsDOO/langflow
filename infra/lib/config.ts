@@ -104,6 +104,17 @@ export interface LangflowEnvironment {
   // ------------------------------------------------------------------ CI/CD
   /** `owner/repo` allowed to assume the pipeline roles. */
   readonly githubRepository: string;
+  /**
+   * Numeric owner and repository ids, from
+   * `gh api repos/<owner>/<repo> --jq '{owner_id:.owner.id, repo_id:.id}'`.
+   *
+   * GitHub is migrating OIDC tokens to immutable subject claims, which splice
+   * these ids into `sub`: `repo:owner@<id>/repo@<id>:ref:...` rather than
+   * `repo:owner/repo:ref:...`. Which form a token carries depends on a
+   * per-repository rollout flag, so the trust policies accept both.
+   */
+  readonly githubOwnerId: string;
+  readonly githubRepositoryId: string;
   /** Branch whose pushes trigger a deployment. Scopes the read-only diff role. */
   readonly githubBranch: string;
   /**
@@ -134,6 +145,8 @@ const GOOGLE_CLIENT_ID = "211416138739-6dkddeo28jb1t1dt7orhmh5f7f2k8qop.apps.goo
 const ALARM_EMAIL = "marko.kozjak@nudge-labs.com";
 /** Repository whose Actions workflows may assume the pipeline roles. */
 const GITHUB_REPOSITORY = "NudgeLabsDOO/langflow";
+const GITHUB_OWNER_ID = "121947197";
+const GITHUB_REPOSITORY_ID = "1361503006";
 
 export const environments: Record<string, LangflowEnvironment> = {
   prod: {
@@ -175,6 +188,8 @@ export const environments: Record<string, LangflowEnvironment> = {
     useRedisCache: true,
 
     githubRepository: GITHUB_REPOSITORY,
+    githubOwnerId: GITHUB_OWNER_ID,
+    githubRepositoryId: GITHUB_REPOSITORY_ID,
     githubBranch: "feature/prod-nl-iac",
     githubEnvironment: "production",
 
@@ -223,6 +238,8 @@ export const environments: Record<string, LangflowEnvironment> = {
     useRedisCache: false,
 
     githubRepository: GITHUB_REPOSITORY,
+    githubOwnerId: GITHUB_OWNER_ID,
+    githubRepositoryId: GITHUB_REPOSITORY_ID,
     githubBranch: "feature/dev-nl-iac",
     githubEnvironment: "development",
 
