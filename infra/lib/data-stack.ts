@@ -116,7 +116,12 @@ export class DataStack extends Stack {
     this.database = new rds.DatabaseCluster(this, "Database", {
       clusterIdentifier: `langflow-${config.envName}`,
       engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_16_6,
+        // The CDK enum lists every version the library knows about, not the
+        // versions a given region actually offers, and a mismatch only fails
+        // once CloudFormation calls RDS. Confirm before changing:
+        //   aws rds describe-db-engine-versions --engine aurora-postgresql \
+        //     --region <region> --query 'DBEngineVersions[].EngineVersion'
+        version: rds.AuroraPostgresEngineVersion.VER_16_13,
       }),
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
