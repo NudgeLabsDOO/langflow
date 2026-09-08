@@ -268,6 +268,23 @@ aws ecs update-service --cluster langflow-prod --service langflow-prod \
 make infra_diff env=prod
 ```
 
+**Recovering from a failed first deploy.** Everything in the data tier is
+`RETAIN`, so a `cdk destroy` cannot take the database with it. The same policy
+applies to a failed *create*: CloudFormation logs `DELETE_SKIPPED` and the
+half-built resource survives with no stack owning it. Because the names are
+deterministic, the next attempt then fails early and unhelpfully with
+`[AWS::EarlyValidation::ResourceExistenceCheck]`.
+
+```bash
+AWS_PROFILE=nudge ./scripts/find-orphans.sh prod
+```
+
+That lists every leftover and the command to remove each one, and deletes
+nothing itself. It treats `REVIEW_IN_PROGRESS` (an empty shell from a change set
+that failed validation) and `ROLLBACK_COMPLETE` (a failed create, which can
+never be updated) as non-owning, since both block the next deploy while holding
+nothing. Run it until it reports a clean slate before retrying.
+
 **Rotating the database password.** Automatic rotation is deliberately not
 configured: ECS resolves secrets once, at task start, so a rotated password
 leaves running tasks holding a credential the cluster no longer accepts. Rotate
