@@ -151,13 +151,11 @@ jobs:
             --progress events \
             --concurrency 2
 
-      - name: Wait for the service to stabilise
-        run: |
-          aws ecs wait services-stable \
-            --cluster langflow-prod \
-            --services langflow-prod \
-            --region "$AWS_REGION"
-
+      # No `aws ecs wait services-stable` here: CloudFormation does not report
+      # CREATE_COMPLETE for an ECS service until it reaches steady state, so the
+      # wait was redundant — and it failed anyway, because the deploy role holds
+      # nothing beyond sts:AssumeRole on the bootstrap roles. Granting it
+      # ecs:DescribeServices would have widened that for a duplicate check.
       - name: Smoke test
         run: |
           # Unauthenticated requests must be bounced to Google by the load
