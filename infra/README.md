@@ -333,6 +333,24 @@ that failed validation) and `ROLLBACK_COMPLETE` (a failed create, which can
 never be updated) as non-owning, since both block the next deploy while holding
 nothing. Run it until it reports a clean slate before retrying.
 
+**The Langflow secret key is a Fernet key, not a passphrase.** Langflow only
+derives a key with SHA-256 when `LANGFLOW_SECRET_KEY` is shorter than 32
+characters; at 32 or more it pads the value and hands it to Fernet verbatim, so
+the secret must itself be 32 url-safe base64 bytes. A longer random string is
+accepted at boot and fails later, the first time a user saves a provider API
+key, with `Fernet key must be 32 url-safe base64-encoded bytes`.
+
+The stack generates 43 characters restricted to the base64url alphabet: the
+padding helper appends one `=`, giving 44 characters that decode to exactly 32
+bytes. To write one by hand:
+
+```bash
+python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
+```
+
+Replacing this value makes every encrypted global variable unreadable, so only
+do it on an environment that has none.
+
 **Rotating the database password.** Automatic rotation is deliberately not
 configured: ECS resolves secrets once, at task start, so a rotated password
 leaves running tasks holding a credential the cluster no longer accepts. Rotate

@@ -188,6 +188,29 @@ describe("data", () => {
     });
   });
 
+  it("generates a secret key that is actually a valid Fernet key", () => {
+    // LANGFLOW_SECRET_KEY is not hashed. ensure_fernet_key only derives via
+    // SHA-256 below 32 characters; at 32+ it pads and passes the value
+    // straight to Fernet, which demands 32 url-safe base64 bytes. 43 base64url
+    // characters plus the appended "=" decode to exactly 32. A longer or
+    // differently-alphabeted secret fails at first use — saving a provider API
+    // key — rather than at boot.
+    const { data } = synth();
+    const secrets = data.findResources("AWS::SecretsManager::Secret");
+    const secretKey = Object.values(secrets).find(
+      (secret: any) => secret.Properties?.Name === "langflow/test/secret-key",
+    ) as any;
+    expect(secretKey).toBeDefined();
+    const gen = secretKey.Properties.GenerateSecretString;
+    expect(gen.PasswordLength).toBe(43);
+    for (const char of "!\"#$%&'()*+,./:;<=>?@[]^`{|}~") {
+      expect(gen.ExcludeCharacters).toContain(char);
+    }
+    // The base64url alphabet's two non-alphanumerics must survive.
+    expect(gen.ExcludeCharacters).not.toContain("-");
+    expect(gen.ExcludeCharacters).not.toContain("_");
+  });
+
   it("encrypts the file system that holds knowledge bases", () => {
     const { data } = synth();
     data.hasResourceProperties("AWS::EFS::FileSystem", { Encrypted: true });

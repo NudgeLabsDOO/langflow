@@ -35,6 +35,25 @@ export interface DataStackProps extends StackProps {
 const URL_UNSAFE_CHARACTERS = "\"@/\\'`$&()*+,:;<=>?[]^{|}~%# !";
 
 /**
+ * Everything outside the base64url alphabet, so a generated secret contains
+ * only [A-Za-z0-9-_].
+ *
+ * LANGFLOW_SECRET_KEY is not hashed into a Fernet key. `ensure_fernet_key`
+ * derives one with SHA-256 only when the secret is shorter than 32 characters;
+ * at 32 or more it is padded and handed to Fernet verbatim, so it must itself
+ * be 32 url-safe base64 bytes. Anything else fails at first use with
+ * "Fernet key must be 32 url-safe base64-encoded bytes" — when a user saves a
+ * provider API key, not at boot.
+ */
+const NON_BASE64URL_CHARACTERS = "!\"#$%&'()*+,./:;<=>?@[\\]^`{|}~";
+
+/**
+ * 43 base64url characters plus the one "=" Langflow's padding helper appends
+ * decode to exactly 32 bytes. 44 or 64 characters do not, and are rejected.
+ */
+const FERNET_KEY_LENGTH = 43;
+
+/**
  * Every stateful resource Langflow needs, all of it encrypted with one
  * customer-managed key and none of it reachable from the internet.
  *
@@ -105,11 +124,11 @@ export class DataStack extends Stack {
     // even when the rest of the environment is torn down.
     this.langflowSecretKey = new secretsmanager.Secret(this, "LangflowSecretKey", {
       secretName: `langflow/${config.envName}/secret-key`,
-      description: "LANGFLOW_SECRET_KEY — never rotate, it decrypts stored global variables",
+      description: "LANGFLOW_SECRET_KEY — a Fernet key. Never rotate: it decrypts stored global variables",
       encryptionKey: this.encryptionKey,
       generateSecretString: {
-        passwordLength: 64,
-        excludePunctuation: true,
+        passwordLength: FERNET_KEY_LENGTH,
+        excludeCharacters: NON_BASE64URL_CHARACTERS,
         includeSpace: false,
       },
       removalPolicy: RemovalPolicy.RETAIN,
