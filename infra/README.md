@@ -159,30 +159,78 @@ minutes, the zone lookup resolved to the wrong zone — check the cached value i
 
 ### 4. Sign in
 
-Open `https://langflow.nudge-platforms.com`. You are sent to Google, and on return
-Langflow creates your user on first sign-in. The first person to sign in is **not**
-a superuser; promote them once:
+Open `https://langflow.nudge-platforms.com`. You are sent to Google, and on
+return Langflow creates your user on first sign-in.
+
+You cannot sign in as the local admin through the browser. The load balancer
+authenticates you first, `/session` then logs you in as your Google identity,
+and the frontend redirects any authenticated user away from `/login`. The
+`admin@nudge-labs.com` account exists because Langflow refuses to boot without a
+superuser when `AUTO_LOGIN` is off; it is the recovery account for a broken SSO
+gate, not a daily login. Its password:
 
 ```bash
-aws ecs execute-command --cluster langflow-prod --task <task-id> \
-  --container langflow --interactive --command "/bin/sh"
-# then, inside the task:
-python -c "
-import asyncio
-from sqlmodel import select
-from langflow.services.deps import session_scope
-from langflow.services.database.models.user.model import User
-
-async def main():
-    async with session_scope() as db:
-        user = (await db.exec(select(User).where(User.username == 'you@nudge-labs.com'))).first()
-        user.is_superuser = True
-        db.add(user)
-        await db.commit()
-
-asyncio.run(main())
-"
+aws secretsmanager get-secret-value \
+  --profile nudge --region eu-central-1 \
+  --secret-id langflow/prod/superuser-password \
+  --query SecretString --output text
 ```
+
+### Promoting yourself to superuser
+
+Sign in with Google once so your user exists, then:
+
+```bash
+export AWS_PROFILE=nudge AWS_REGION=eu-central-1
+TASK=$(aws ecs list-tasks --cluster langflow-prod --desired-status RUNNING \
+        --query 'taskArns[0]' --output text | sed 's|.*/||')
+
+script -q /dev/null aws ecs execute-command --cluster langflow-prod \
+  --task "$TASK" --container langflow --interactive --command "/bin/sh"
+```
+
+Then inside the container:
+
+```sh
+python - <<'EOF'
+import os, sqlalchemy as sa
+
+USERNAME = "you@nudge-labs.com"
+
+url = "postgresql+psycopg://%s:%s@%s:%s/%s" % (
+    os.environ["DB_USER"], os.environ["DB_PASSWORD"],
+    os.environ["DB_HOST"], os.environ["DB_PORT"], os.environ["DB_NAME"],
+)
+engine = sa.create_engine(url)
+with engine.begin() as conn:
+    updated = conn.execute(
+        sa.text('update "user" set is_superuser = true where username = :u'),
+        {"u": USERNAME},
+    ).rowcount
+    print("rows updated:", updated)
+with engine.connect() as conn:
+    for row in conn.execute(sa.text('select username, is_superuser, is_active from "user"')):
+        print(" ", row)
+EOF
+```
+
+Sign out and back in for the UI to notice.
+
+Two traps make the obvious version of this silently wrong, and both fail by
+reporting *no users* rather than by erroring:
+
+- **`LANGFLOW_DATABASE_URL` does not exist in an exec session.** It is composed
+  by the container's startup shell, so only PID 1 has it. A fresh `sh` sees the
+  `DB_*` parts and nothing else, and Langflow falls back to a SQLite file inside
+  `site-packages`. Build the URL from the parts, as above.
+- **`langflow.services.deps.session_scope` does not work outside the running
+  app.** Without initialized services it hands back a no-op session whose
+  queries return empty results — `select(User)` reports zero users against a
+  database holding several. Use a plain SQLAlchemy engine instead.
+
+Both are also why `script -q /dev/null` is there: `execute-command --interactive`
+needs a TTY, and without one the session dies with `Cannot perform start
+session: EOF` part-way through the output.
 
 ## Continuous deployment
 
