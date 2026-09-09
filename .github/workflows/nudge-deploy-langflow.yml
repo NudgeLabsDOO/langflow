@@ -34,10 +34,14 @@ permissions:
   contents: read
   id-token: write
 
+# Actions are pinned to commit SHAs, not tags. A tag can be repointed at new
+# code; this job holds credentials that can deploy anything CloudFormation can
+# build, so an action it runs must be exactly the reviewed revision. The trailing
+# comment is the human-readable version — keep the two in step when bumping.
 env:
   AWS_REGION: eu-central-1
   CDK_ENV: prod
-  NODE_VERSION: "22"
+  NODE_VERSION: "24"
 
 jobs:
   validate:
@@ -48,8 +52,8 @@ jobs:
       run:
         working-directory: infra
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -67,8 +71,8 @@ jobs:
       run:
         working-directory: infra
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -76,7 +80,7 @@ jobs:
       - run: npm ci
 
       - name: Assume the read-only diff role
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::447237717633:role/langflow-prod-github-diff
           aws-region: ${{ env.AWS_REGION }}
@@ -117,18 +121,18 @@ jobs:
       run:
         working-directory: infra
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: infra/package-lock.json
       - run: npm ci
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Assume the deploy role
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::447237717633:role/langflow-prod-github-deploy
           aws-region: ${{ env.AWS_REGION }}
