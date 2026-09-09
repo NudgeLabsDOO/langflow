@@ -38,6 +38,13 @@ export interface LangflowEnvironment {
   readonly googleClientSecretName: string;
   /** Optional JSON field inside that secret. Omit if the secret is the raw value. */
   readonly googleClientSecretJsonField?: string;
+  /**
+   * Local superuser Langflow bootstraps with. Required whenever AUTO_LOGIN is
+   * off — boot aborts with "Username and password must be set" otherwise. Its
+   * password is generated into Secrets Manager, never written here. This is the
+   * break-glass admin; everyday access is the Google SSO identity.
+   */
+  readonly superuserUsername: string;
   /** Globally unique prefix for the Cognito hosted UI domain. */
   readonly cognitoDomainPrefix: string;
   /** How long an ALB-issued SSO session lasts before re-authentication. */
@@ -160,6 +167,7 @@ export const environments: Record<string, LangflowEnvironment> = {
     allowedEmailDomains: [WORKSPACE_EMAIL_DOMAIN],
     googleClientId: process.env.LANGFLOW_GOOGLE_CLIENT_ID ?? GOOGLE_CLIENT_ID,
     googleClientSecretName: "langflow/prod/google-oauth-client-secret",
+    superuserUsername: "admin@nudge-labs.com",
     cognitoDomainPrefix: "nudge-labs-langflow",
     ssoSessionTimeout: Duration.hours(8),
     allowApiKeyBypass: false,
@@ -210,6 +218,7 @@ export const environments: Record<string, LangflowEnvironment> = {
     allowedEmailDomains: [WORKSPACE_EMAIL_DOMAIN],
     googleClientId: process.env.LANGFLOW_GOOGLE_CLIENT_ID ?? GOOGLE_CLIENT_ID,
     googleClientSecretName: "langflow/dev/google-oauth-client-secret",
+    superuserUsername: "admin@nudge-labs.com",
     cognitoDomainPrefix: "nudge-labs-langflow-dev",
     ssoSessionTimeout: Duration.hours(12),
     allowApiKeyBypass: true,

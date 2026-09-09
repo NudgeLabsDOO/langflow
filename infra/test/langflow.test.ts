@@ -22,6 +22,7 @@ const testConfig: LangflowEnvironment = {
   allowedEmailDomains: ["nudge-labs.com"],
   googleClientId: "test-client-id.apps.googleusercontent.com",
   googleClientSecretName: "langflow/test/google-oauth-client-secret",
+  superuserUsername: "admin@nudge-labs.com",
   cognitoDomainPrefix: "nudge-labs-langflow-test",
   ssoSessionTimeout: Duration.hours(8),
   allowApiKeyBypass: false,
@@ -86,6 +87,8 @@ function synth(config: LangflowEnvironment = testConfig) {
     encryptionKeyArn: data.encryptionKey.keyArn,
     databaseSecretArn: data.databaseSecret.secretArn,
     langflowSecretKeyArn: data.langflowSecretKey.secretArn,
+    superuserPasswordArn: data.superuserPassword.secretArn,
+    logGroupName: data.serviceLogGroup.logGroupName,
     redisAuthSecretArn: data.redisAuthSecret?.secretArn,
     fileBucketName: data.fileBucket.bucketName,
     fileSystem: data.fileSystem,
@@ -298,6 +301,27 @@ describe("service", () => {
     expect(kmsStatement.Condition.StringEquals["kms:ViaService"]).toBe(
       "secretsmanager.eu-central-1.amazonaws.com",
     );
+  });
+
+  it("gives Langflow the superuser credentials that AUTO_LOGIN=false demands", () => {
+    // Regression guard. With auto-login off, setup_superuser raises
+    // "Username and password must be set" and the worker dies during boot.
+    // ECS reports only "Essential container exited, code 3" (gunicorn's
+    // "worker failed to boot"), so the real cause is invisible from the
+    // console — and if the log group goes with the rollback, from anywhere.
+    const { service } = synth();
+    service.hasResourceProperties("AWS::ECS::TaskDefinition", {
+      ContainerDefinitions: Match.arrayWith([
+        Match.objectLike({
+          Environment: Match.arrayWith([
+            { Name: "LANGFLOW_SUPERUSER", Value: "admin@nudge-labs.com" },
+          ]),
+          Secrets: Match.arrayWith([
+            Match.objectLike({ Name: "LANGFLOW_SUPERUSER_PASSWORD" }),
+          ]),
+        }),
+      ]),
+    });
   });
 
   it("retains nothing, so the stateless stack can always be recreated", () => {

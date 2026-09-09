@@ -47,7 +47,10 @@ export interface ServiceStackProps extends StackProps {
   readonly encryptionKeyArn: string;
   readonly databaseSecretArn: string;
   readonly langflowSecretKeyArn: string;
+  readonly superuserPasswordArn: string;
   readonly redisAuthSecretArn?: string;
+  /** Created in the data stack so crash logs survive a rollback of this one. */
+  readonly logGroupName: string;
   readonly fileBucketName: string;
   readonly fileSystem: efs.IFileSystem;
   readonly accessPoint: efs.IAccessPoint;
@@ -101,6 +104,10 @@ export class ServiceStack extends Stack {
       secretCompleteArn: props.langflowSecretKeyArn,
       encryptionKey,
     });
+    const superuserPassword = secretsmanager.Secret.fromSecretAttributes(this, "SuperuserPassword", {
+      secretCompleteArn: props.superuserPasswordArn,
+      encryptionKey,
+    });
     const redisAuthSecret = props.redisAuthSecretArn
       ? secretsmanager.Secret.fromSecretAttributes(this, "RedisAuthSecret", {
           secretCompleteArn: props.redisAuthSecretArn,
@@ -138,17 +145,7 @@ export class ServiceStack extends Stack {
     // ------------------------------------------------------------- Container
     const image = this.resolveImage(config);
 
-    const logGroup = new logs.LogGroup(this, "LogGroup", {
-      logGroupName: `/langflow/${config.envName}/service`,
-      retention: config.logRetention,
-      encryptionKey,
-      // Destroyed with the stack, like everything else here. The name is
-      // deterministic, so a retained log group outlives a rollback and then
-      // blocks the next create — CloudFormation will not adopt a resource it
-      // does not own. Retention already bounds how much history exists; ship
-      // logs downstream if they need to survive the stack.
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
+    const logGroup = logs.LogGroup.fromLogGroupName(this, "LogGroup", props.logGroupName);
 
     const taskDefinition = new ecs.FargateTaskDefinition(this, "TaskDefinition", {
       family: `langflow-${config.envName}`,
@@ -242,7 +239,7 @@ export class ServiceStack extends Stack {
       image,
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "langflow", logGroup }),
       environment: this.buildEnvironment(props),
-      secrets: buildSecrets({ databaseSecret, langflowSecretKey, redisAuthSecret }),
+      secrets: buildSecrets({ databaseSecret, langflowSecretKey, superuserPassword, redisAuthSecret }),
       entryPoint: ["/bin/sh", "-c"],
       command: [buildStartupScript(Boolean(props.redisEndpoint))],
       portMappings: [
@@ -465,6 +462,11 @@ export class ServiceStack extends Stack {
       LANGFLOW_ENABLE_SIGNUP: "false",
       LANGFLOW_ENABLE_SUPERUSER_CLI: "false",
       LANGFLOW_NEW_USER_IS_ACTIVE: "true",
+      // Required whenever AUTO_LOGIN is off: setup_superuser raises
+      // "Username and password must be set" and the worker dies during boot,
+      // which surfaces only as gunicorn exit code 3. The password arrives as a
+      // secret; this is just the account name.
+      LANGFLOW_SUPERUSER: config.superuserUsername,
 
       // Trust the ALB-signed identity header. `x-amzn-oidc-data` is a JWT the
       // load balancer mints from the Cognito/Google claims and overwrites on
@@ -690,6 +692,7 @@ export class ServiceStack extends Stack {
 interface SecretSources {
   readonly databaseSecret: secretsmanager.ISecret;
   readonly langflowSecretKey: secretsmanager.ISecret;
+  readonly superuserPassword: secretsmanager.ISecret;
   readonly redisAuthSecret?: secretsmanager.ISecret;
 }
 
@@ -708,6 +711,7 @@ function buildSecrets(sources: SecretSources): Record<string, ecs.Secret> {
     DB_PASSWORD: ecs.Secret.fromSecretsManager(sources.databaseSecret, "password"),
     DB_NAME: ecs.Secret.fromSecretsManager(sources.databaseSecret, "dbname"),
     LANGFLOW_SECRET_KEY: ecs.Secret.fromSecretsManager(sources.langflowSecretKey),
+    LANGFLOW_SUPERUSER_PASSWORD: ecs.Secret.fromSecretsManager(sources.superuserPassword),
   };
   if (sources.redisAuthSecret) {
     secrets.REDIS_AUTH_TOKEN = ecs.Secret.fromSecretsManager(sources.redisAuthSecret);

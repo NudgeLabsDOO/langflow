@@ -6,6 +6,7 @@ import * as elasticache from "aws-cdk-lib/aws-elasticache";
 import * as efs from "aws-cdk-lib/aws-efs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as kms from "aws-cdk-lib/aws-kms";
+import * as logs from "aws-cdk-lib/aws-logs";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
@@ -54,6 +55,8 @@ export class DataStack extends Stack {
   public readonly redis?: elasticache.CfnReplicationGroup;
   public readonly redisAuthSecret?: secretsmanager.Secret;
   public readonly langflowSecretKey: secretsmanager.Secret;
+  public readonly superuserPassword: secretsmanager.Secret;
+  public readonly serviceLogGroup: logs.LogGroup;
   public readonly alarmTopic: sns.Topic;
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
@@ -110,6 +113,32 @@ export class DataStack extends Stack {
         includeSpace: false,
       },
       removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // Langflow refuses to boot with AUTO_LOGIN disabled unless a superuser
+    // username and password are both set. Generated once and retained: the
+    // account owns encrypted data, and rotating it here would not re-hash the
+    // stored credential.
+    this.superuserPassword = new secretsmanager.Secret(this, "SuperuserPassword", {
+      secretName: `langflow/${config.envName}/superuser-password`,
+      description: `Password for the ${config.superuserUsername} break-glass admin account`,
+      encryptionKey: this.encryptionKey,
+      generateSecretString: {
+        passwordLength: 48,
+        excludeCharacters: URL_UNSAFE_CHARACTERS,
+        includeSpace: false,
+      },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // The application log group lives with the durable resources, not with the
+    // service that writes to it. Owned by the stateless stack it was destroyed
+    // on rollback, taking the crash logs with it — precisely when they matter.
+    this.serviceLogGroup = new logs.LogGroup(this, "ServiceLogGroup", {
+      logGroupName: `/langflow/${config.envName}/service`,
+      retention: config.logRetention,
+      encryptionKey: this.encryptionKey,
+      removalPolicy: config.removalPolicy,
     });
 
     // --------------------------------------------------------------- Postgres
@@ -271,6 +300,7 @@ export class DataStack extends Stack {
     new CfnOutput(this, "DatabaseSecretArn", { value: this.databaseSecret.secretArn });
     new CfnOutput(this, "FileBucketName", { value: this.fileBucket.bucketName });
     new CfnOutput(this, "FileSystemId", { value: this.fileSystem.fileSystemId });
+    new CfnOutput(this, "SuperuserPasswordSecret", { value: this.superuserPassword.secretName });
     if (this.redis) {
       new CfnOutput(this, "RedisPrimaryEndpoint", {
         value: this.redis.attrPrimaryEndPointAddress,

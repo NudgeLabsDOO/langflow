@@ -53,7 +53,8 @@ if is_shell "$DATA_STATUS"; then
     fi
   done
 
-  for secret in "langflow/${ENV_NAME}/secret-key" "langflow/${ENV_NAME}/database" "langflow/${ENV_NAME}/redis-auth-token"; do
+  for secret in "langflow/${ENV_NAME}/secret-key" "langflow/${ENV_NAME}/database" \
+                "langflow/${ENV_NAME}/redis-auth-token" "langflow/${ENV_NAME}/superuser-password"; do
     if aws secretsmanager describe-secret --secret-id "$secret" >/dev/null 2>&1; then
       report "secret $secret" "aws secretsmanager delete-secret --secret-id $secret --force-delete-without-recovery"
     fi
@@ -69,6 +70,13 @@ if is_shell "$DATA_STATUS"; then
     --query "Aliases[?AliasName=='alias/langflow-${ENV_NAME}'].TargetKeyId | [0]" --output text)"
   if [ "$key_id" != "None" ] && [ -n "$key_id" ]; then
     report "kms $key_id" "aws kms schedule-key-deletion --key-id $key_id --pending-window-in-days 7"
+  fi
+
+  log_group="/langflow/${ENV_NAME}/service"
+  if [ -n "$(aws logs describe-log-groups --log-group-name-prefix "$log_group" \
+      --query "logGroups[?logGroupName=='$log_group'].logGroupName | [0]" --output text 2>/dev/null \
+      | grep -v '^None$')" ]; then
+    report "log group $log_group" "aws logs delete-log-group --log-group-name $log_group"
   fi
 
   cluster="$(aws rds describe-db-clusters \
@@ -102,13 +110,6 @@ if is_shell "$SERVICE_STATUS"; then
   alb_logs="langflow-${ENV_NAME}-alb-logs-${ACCOUNT}"
   if aws s3api head-bucket --bucket "$alb_logs" >/dev/null 2>&1; then
     report "s3://$alb_logs" "aws s3 rb s3://$alb_logs --force"
-  fi
-
-  log_group="/langflow/${ENV_NAME}/service"
-  if [ -n "$(aws logs describe-log-groups --log-group-name-prefix "$log_group" \
-      --query "logGroups[?logGroupName=='$log_group'].logGroupName | [0]" --output text 2>/dev/null \
-      | grep -v '^None$')" ]; then
-    report "log group $log_group" "aws logs delete-log-group --log-group-name $log_group"
   fi
 
   if [ -n "$(aws cloudwatch list-dashboards \

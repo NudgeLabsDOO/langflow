@@ -67,6 +67,8 @@ const service = new ServiceStack(app, `${prefix}-Service`, {
   encryptionKeyArn: data.encryptionKey.keyArn,
   databaseSecretArn: data.databaseSecret.secretArn,
   langflowSecretKeyArn: data.langflowSecretKey.secretArn,
+  superuserPasswordArn: data.superuserPassword.secretArn,
+  logGroupName: data.serviceLogGroup.logGroupName,
   redisAuthSecretArn: data.redisAuthSecret?.secretArn,
   fileBucketName: data.fileBucket.bucketName,
   fileSystem: data.fileSystem,
