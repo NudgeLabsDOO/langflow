@@ -33,7 +33,7 @@ Available for Windows and macOS.
 
 [📥 Download Langflow Desktop](https://www.langflow.org/desktop)
 
-## ⚡️ Quickstart
+## Quickstart
 
 ### Install locally (recommended)
 
