@@ -108,6 +108,15 @@ export class ServiceStack extends Stack {
       secretCompleteArn: props.superuserPasswordArn,
       encryptionKey,
     });
+    // This secret is deliberately created outside CloudFormation. Importing it
+    // by name keeps the provider credential out of source, GitHub Actions, CDK
+    // context and the synthesized template; ECS resolves its value at task
+    // startup using the task execution role.
+    const openAiApiKey = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      "OpenAiApiKey",
+      config.openAiApiKeySecretName,
+    );
     const redisAuthSecret = props.redisAuthSecretArn
       ? secretsmanager.Secret.fromSecretAttributes(this, "RedisAuthSecret", {
           secretCompleteArn: props.redisAuthSecretArn,
@@ -239,7 +248,13 @@ export class ServiceStack extends Stack {
       image,
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "langflow", logGroup }),
       environment: this.buildEnvironment(props),
-      secrets: buildSecrets({ databaseSecret, langflowSecretKey, superuserPassword, redisAuthSecret }),
+      secrets: buildSecrets({
+        databaseSecret,
+        langflowSecretKey,
+        superuserPassword,
+        openAiApiKey,
+        redisAuthSecret,
+      }),
       entryPoint: ["/bin/sh", "-c"],
       command: [buildStartupScript(Boolean(props.redisEndpoint))],
       portMappings: [
@@ -488,6 +503,11 @@ export class ServiceStack extends Stack {
       LANGFLOW_ACCESS_SAME_SITE: "lax",
       LANGFLOW_REFRESH_SAME_SITE: "lax",
 
+      // Provider credentials come from the task environment. Do not duplicate
+      // them into every user's encrypted database variables on first login.
+      LANGFLOW_FALLBACK_TO_ENV_VAR: "true",
+      LANGFLOW_STORE_ENVIRONMENT_VARIABLES: "false",
+
       // --------------------------------------------------------- Storage
       LANGFLOW_STORAGE_TYPE: "s3",
       LANGFLOW_OBJECT_STORAGE_BUCKET_NAME: props.fileBucketName,
@@ -693,6 +713,7 @@ interface SecretSources {
   readonly databaseSecret: secretsmanager.ISecret;
   readonly langflowSecretKey: secretsmanager.ISecret;
   readonly superuserPassword: secretsmanager.ISecret;
+  readonly openAiApiKey: secretsmanager.ISecret;
   readonly redisAuthSecret?: secretsmanager.ISecret;
 }
 
@@ -712,6 +733,7 @@ function buildSecrets(sources: SecretSources): Record<string, ecs.Secret> {
     DB_NAME: ecs.Secret.fromSecretsManager(sources.databaseSecret, "dbname"),
     LANGFLOW_SECRET_KEY: ecs.Secret.fromSecretsManager(sources.langflowSecretKey),
     LANGFLOW_SUPERUSER_PASSWORD: ecs.Secret.fromSecretsManager(sources.superuserPassword),
+    OPENAI_API_KEY: ecs.Secret.fromSecretsManager(sources.openAiApiKey),
   };
   if (sources.redisAuthSecret) {
     secrets.REDIS_AUTH_TOKEN = ecs.Secret.fromSecretsManager(sources.redisAuthSecret);
