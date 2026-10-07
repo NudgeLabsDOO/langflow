@@ -21,7 +21,8 @@ const testConfig: LangflowEnvironment = {
   domainName: "langflow.nudge-platforms.com",
   allowedEmailDomains: ["nudge-labs.com"],
   googleClientId: "test-client-id.apps.googleusercontent.com",
-  googleClientSecretName: "langflow/test/google-oauth-client-secret",
+  googleClientSecretName: "langflow/test/google-oauth-client-secret", // pragma: allowlist secret
+  openAiApiKeySecretName: "langflow/test/openai-api-key", // pragma: allowlist secret
   superuserUsername: "admin@nudge-labs.com",
   cognitoDomainPrefix: "nudge-labs-langflow-test",
   ssoSessionTimeout: Duration.hours(8),
@@ -345,6 +346,25 @@ describe("service", () => {
         }),
       ]),
     });
+  });
+
+  it("injects the pre-existing OpenAI key without storing it in the template or user variables", () => {
+    const { service } = synth();
+    service.hasResourceProperties("AWS::ECS::TaskDefinition", {
+      ContainerDefinitions: Match.arrayWith([
+        Match.objectLike({
+          Environment: Match.arrayWith([
+            { Name: "LANGFLOW_FALLBACK_TO_ENV_VAR", Value: "true" },
+            { Name: "LANGFLOW_STORE_ENVIRONMENT_VARIABLES", Value: "false" },
+          ]),
+          Secrets: Match.arrayWith([
+            Match.objectLike({ Name: "OPENAI_API_KEY" }),
+          ]),
+        }),
+      ]),
+    });
+    expect(JSON.stringify(service.toJSON())).toContain("langflow/test/openai-api-key"); // pragma: allowlist secret
+    service.resourceCountIs("AWS::SecretsManager::Secret", 0);
   });
 
   it("retains nothing, so the stateless stack can always be recreated", () => {

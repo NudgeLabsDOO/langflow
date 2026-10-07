@@ -39,6 +39,12 @@ export interface LangflowEnvironment {
   /** Optional JSON field inside that secret. Omit if the secret is the raw value. */
   readonly googleClientSecretJsonField?: string;
   /**
+   * Name of the pre-existing Secrets Manager secret whose entire SecretString
+   * is the OpenAI API key. The secret is created out of band so neither the key
+   * nor a copy of it ever passes through GitHub or CloudFormation.
+   */
+  readonly openAiApiKeySecretName: string;
+  /**
    * Local superuser Langflow bootstraps with. Required whenever AUTO_LOGIN is
    * off — boot aborts with "Username and password must be set" otherwise. Its
    * password is generated into Secrets Manager, never written here. This is the
@@ -166,7 +172,8 @@ export const environments: Record<string, LangflowEnvironment> = {
 
     allowedEmailDomains: [WORKSPACE_EMAIL_DOMAIN],
     googleClientId: process.env.LANGFLOW_GOOGLE_CLIENT_ID ?? GOOGLE_CLIENT_ID,
-    googleClientSecretName: "langflow/prod/google-oauth-client-secret",
+    googleClientSecretName: "langflow/prod/google-oauth-client-secret", // pragma: allowlist secret
+    openAiApiKeySecretName: "langflow/prod/openai-api-key", // pragma: allowlist secret
     superuserUsername: "admin@nudge-labs.com",
     cognitoDomainPrefix: "nudge-labs-langflow",
     ssoSessionTimeout: Duration.hours(8),
@@ -217,7 +224,8 @@ export const environments: Record<string, LangflowEnvironment> = {
 
     allowedEmailDomains: [WORKSPACE_EMAIL_DOMAIN],
     googleClientId: process.env.LANGFLOW_GOOGLE_CLIENT_ID ?? GOOGLE_CLIENT_ID,
-    googleClientSecretName: "langflow/dev/google-oauth-client-secret",
+    googleClientSecretName: "langflow/dev/google-oauth-client-secret", // pragma: allowlist secret
+    openAiApiKeySecretName: "langflow/dev/openai-api-key", // pragma: allowlist secret
     superuserUsername: "admin@nudge-labs.com",
     cognitoDomainPrefix: "nudge-labs-langflow-dev",
     ssoSessionTimeout: Duration.hours(12),

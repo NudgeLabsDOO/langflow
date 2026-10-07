@@ -197,7 +197,7 @@ import os, sqlalchemy as sa
 
 USERNAME = "you@nudge-labs.com"
 
-url = "postgresql+psycopg://%s:%s@%s:%s/%s" % (
+url = "postgresql+psycopg://%s:%s@%s:%s/%s" % (  # pragma: allowlist secret
     os.environ["DB_USER"], os.environ["DB_PASSWORD"],
     os.environ["DB_HOST"], os.environ["DB_PORT"], os.environ["DB_NAME"],
 )
