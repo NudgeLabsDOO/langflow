@@ -277,6 +277,127 @@ repository.
 updating the trigger in the workflow — the values are baked into the IAM trust
 policies.
 
+## GitHub Actions policy
+
+The repository runs under `allowed_actions: selected`, and the allow-list is
+deliberately small:
+
+```json
+{"github_owned_allowed": true,
+ "verified_allowed": false,
+ "patterns_allowed": ["aws-actions/configure-aws-credentials@*",
+                      "docker/setup-buildx-action@*"]}
+```
+
+That is GitHub-owned actions plus exactly the two third-party ones the deploy
+workflow uses. `verified_allowed` is off on purpose: "all Marketplace-verified
+creators" is thousands of publishers, which is not a meaningful restriction for
+a job holding credentials that can deploy anything CloudFormation can build.
+
+The `@*` patterns do match a 40-character commit SHA, which matters because the
+workflow pins SHAs rather than tags.
+
+Read the current state with:
+
+```bash
+gh api repos/NudgeLabsDOO/langflow/actions/permissions
+gh api repos/NudgeLabsDOO/langflow/actions/permissions/selected-actions
+```
+
+A workflow blocked by this policy fails as `startup_failure` before any job
+starts, with "actions ... are not allowed in NudgeLabsDOO/langflow". Setting the
+policy to `local_only` blocks *every* non-NudgeLabsDOO action and so disables CI
+entirely — that is not a safe default for this repository.
+
+### The upstream Langflow workflows are disabled
+
+This fork changes no Langflow application code — `git diff --name-only
+main...HEAD` is `infra/`, the Makefile, AGENTS.md and the deploy workflow. The
+inherited CI therefore tests upstream code against upstream code and reports
+nothing this fork can act on, while costing a full matrix run on every PR.
+
+Disabled manually, files left in place so upstream syncs do not conflict:
+
+| Workflow | Why |
+| --- | --- |
+| `ci.yml` | Tests application code this fork does not modify |
+| `smoke-tests.yml` | Same |
+| `test-coverage-advisor.yml` | Coverage on unmodified code |
+| `community-label.yml` | Labels outside contributors; also `pull_request_target` |
+| `conventional-labels.yml` | Upstream project management; also `pull_request_target` |
+
+The last two ran on `pull_request_target`, which executes with the base
+repository's write token while the pull request supplies the content. On a
+public repository that is the standard privilege-escalation path, and it existed
+only to label drive-by contributions this fork does not receive.
+
+### Bringing them back
+
+Needed as soon as this fork starts patching Langflow itself rather than only
+`infra/` — at that point the test suite is reporting on your changes and earns
+its cost.
+
+Enabling a workflow is not enough on its own: it will fail on the Actions policy
+until its actions are allowed. Do both.
+
+```bash
+gh workflow enable ci.yml --repo NudgeLabsDOO/langflow
+gh workflow enable smoke-tests.yml --repo NudgeLabsDOO/langflow
+```
+
+Then widen the allow-list. This is every non-GitHub action the inherited
+workflows reference:
+
+```bash
+cat > /tmp/selected-actions.json <<'JSON'
+{
+  "github_owned_allowed": true,
+  "verified_allowed": false,
+  "patterns_allowed": [
+    "MishaKav/jest-coverage-comment@*",
+    "Namchee/conventional-pr@*",
+    "astral-sh/setup-uv@*",
+    "autofix-ci/action@*",
+    "aws-actions/configure-aws-credentials@*",
+    "codecov/codecov-action@*",
+    "docker/build-push-action@*",
+    "docker/login-action@*",
+    "docker/metadata-action@*",
+    "docker/setup-buildx-action@*",
+    "docker/setup-qemu-action@*",
+    "dorny/paths-filter@*",
+    "mikepenz/action-junit-report@*",
+    "ncipollo/release-action@*",
+    "nick-fields/retry@*",
+    "peaceiris/actions-gh-pages@*",
+    "peter-evans/create-or-update-comment@*",
+    "peter-evans/create-pull-request@*",
+    "peter-evans/find-comment@*",
+    "softprops/action-gh-release@*"
+  ]
+}
+JSON
+
+gh api --method PUT \
+  repos/NudgeLabsDOO/langflow/actions/permissions/selected-actions \
+  --input /tmp/selected-actions.json
+```
+
+Regenerate that list after an upstream sync rather than trusting this copy:
+
+```bash
+grep -rhoE "uses:[[:space:]]*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" .github/workflows/ \
+  | sed -E 's/uses:[[:space:]]*//' | sort -u \
+  | grep -vE "^(actions|github)/|^\./"
+```
+
+POSIX classes rather than `\s`: BSD sed (macOS) does not understand `\s`, so
+the leading space survives, `^(actions|github)/` then matches nothing, and the
+list silently comes back with every GitHub-owned action in it.
+
+Enable only the workflows you want and allow only the actions those workflows
+use — the list above covers all of them, including ones you may leave disabled.
+
 ## Configuration
 
 Everything environment-specific lives in `lib/config.ts`. The `prod` and `dev`

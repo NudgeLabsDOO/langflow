@@ -447,9 +447,12 @@ export class ServiceStack extends Stack {
       exclude: [
         ".git",
         ".github",
+        // The Dockerfile copies nothing from infra/ — verified against its COPY
+        // lines. Leaving it in the context meant the asset hash moved whenever a
+        // stack or even this README changed, rebuilding the image and replacing
+        // every task for a change the image cannot observe.
+        "infra",
         "docs",
-        "infra/node_modules",
-        "infra/cdk.out",
         "**/node_modules",
         "**/.venv",
         "**/cdk.out",
