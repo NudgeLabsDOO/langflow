@@ -348,14 +348,14 @@ describe("service", () => {
     });
   });
 
-  it("injects the pre-existing OpenAI key without storing it in the template or user variables", () => {
+  it("injects the pre-existing OpenAI key and imports it into user variables", () => {
     const { service } = synth();
     service.hasResourceProperties("AWS::ECS::TaskDefinition", {
       ContainerDefinitions: Match.arrayWith([
         Match.objectLike({
           Environment: Match.arrayWith([
             { Name: "LANGFLOW_FALLBACK_TO_ENV_VAR", Value: "true" },
-            { Name: "LANGFLOW_STORE_ENVIRONMENT_VARIABLES", Value: "false" },
+            { Name: "LANGFLOW_STORE_ENVIRONMENT_VARIABLES", Value: "true" },
           ]),
           Secrets: Match.arrayWith([
             Match.objectLike({ Name: "OPENAI_API_KEY" }),

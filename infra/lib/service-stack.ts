@@ -506,10 +506,10 @@ export class ServiceStack extends Stack {
       LANGFLOW_ACCESS_SAME_SITE: "lax",
       LANGFLOW_REFRESH_SAME_SITE: "lax",
 
-      // Provider credentials come from the task environment. Do not duplicate
-      // them into every user's encrypted database variables on first login.
+      // Provider credentials come from the task environment. Import them into
+      // each user's encrypted variables so the UI marks providers configured.
       LANGFLOW_FALLBACK_TO_ENV_VAR: "true",
-      LANGFLOW_STORE_ENVIRONMENT_VARIABLES: "false",
+      LANGFLOW_STORE_ENVIRONMENT_VARIABLES: "true",
 
       // --------------------------------------------------------- Storage
       LANGFLOW_STORAGE_TYPE: "s3",
