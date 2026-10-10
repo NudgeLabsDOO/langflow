@@ -145,7 +145,18 @@ class DatabaseVariableService(VariableService, Service):
                                 f"Skipping update of user-modified variable {var_name} with environment value"
                             )
                         else:
-                            await self.update_variable(user_id, var_name, value, session=session)
+                            current_value = (
+                                auth_utils.decrypt_api_key(existing.value)
+                                if existing.type == CREDENTIAL_TYPE
+                                else existing.value
+                            )
+                            if current_value != value:
+                                # Environment rotations must not mark the row as
+                                # user-edited, or the next rotation would be skipped.
+                                updated_at = existing.updated_at
+                                await self.update_variable(user_id, var_name, value, session=session)
+                                existing.updated_at = updated_at
+                                await session.flush()
                     else:
                         await self.create_variable(
                             user_id=user_id,

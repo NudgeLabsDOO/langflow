@@ -46,6 +46,44 @@ async def initialized_services(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(30)
+async def test_startup_imports_environment_credentials_for_existing_users(initialized_services, monkeypatch):  # noqa: ARG001
+    """A restart backfills accounts created before credential imports were enabled."""
+    from langflow.services.database.models.auth import SSOUserProfile
+    from langflow.services.deps import get_variable_service
+    from langflow.services.utils import initialize_services
+
+    settings = get_settings_service().settings
+    monkeypatch.setattr(settings, "variables_to_get_from_environment", ["OPENAI_API_KEY"])
+    monkeypatch.setenv("OPENAI_API_KEY", "shared-deployment-key")
+    # Cross the initialization batch boundary and include a pre-existing SSO account.
+    async with session_scope() as session:
+        users = [User(username=f"existing-{i}", password="unused") for i in range(101)]  # noqa: S106  # pragma: allowlist secret
+        session.add_all(users)
+        await session.flush()
+        user_ids = [user.id for user in users]
+        session.add(SSOUserProfile(user_id=user_ids[0], sso_provider="cognito-google", sso_user_id="existing-subject"))
+
+    monkeypatch.setattr(settings, "store_environment_variables", False)
+    await initialize_services(skip_superuser_setup=True)
+    async with session_scope() as session:
+        assert await get_variable_service().list_variables(user_ids[0], session) == []
+
+    monkeypatch.setattr(settings, "store_environment_variables", True)
+    await initialize_services(skip_superuser_setup=True)
+    await initialize_services(skip_superuser_setup=True)
+    async with session_scope() as session:
+        for user_id in user_ids:
+            variables = await get_variable_service().get_all(user_id, session)
+            assert len(variables) == 1
+            assert variables[0].name == "OPENAI_API_KEY"
+            assert variables[0].has_value is True
+            assert variables[0].value is None
+            stored = await get_variable_service().get_variable(user_id, "OPENAI_API_KEY", "", session)
+            assert stored.get_secret_value() == "shared-deployment-key"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(30)
 async def test_initialize_services_creates_default_superuser_when_auto_login_true(initialized_services):  # noqa: ARG001
     """Test that setup_superuser creates the default superuser when AUTO_LOGIN=True."""
     settings = get_settings_service()

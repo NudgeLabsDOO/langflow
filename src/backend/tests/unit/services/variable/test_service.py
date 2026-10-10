@@ -66,6 +66,38 @@ async def test_initialize_user_variables__create_and_update(service, session: As
     assert all(i not in variables for i in bad_vars)
 
 
+async def test_environment_import_remains_rotatable_and_preserves_user_edits(service, session, monkeypatch):
+    user_id = uuid4()
+    name = "OPENAI_API_KEY"
+    monkeypatch.setattr(service.settings_service.settings, "store_environment_variables", True)
+    monkeypatch.setattr(service.settings_service.settings, "variables_to_get_from_environment", [name])
+    monkeypatch.setenv(name, "first-deployment-key")
+    await service.initialize_user_variables(user_id, session)
+    original = await service.get_variable_object(user_id, name, session)
+    ciphertext = original.value
+
+    await service.initialize_user_variables(user_id, session)
+    assert original.value == ciphertext
+    assert original.updated_at is None
+
+    for value in ("second-deployment-key", "third-deployment-key"):
+        monkeypatch.setenv(name, value)
+        await service.initialize_user_variables(user_id, session)
+        stored = await service.get_variable(user_id, name, "", session)
+        assert stored.get_secret_value() == value
+        assert original.updated_at is None
+
+    await service.update_variable(user_id, name, "user-owned-key", session)
+    monkeypatch.setenv(name, "fourth-deployment-key")
+    await service.initialize_user_variables(user_id, session)
+    stored = await service.get_variable(user_id, name, "", session)
+    assert stored.get_secret_value() == "user-owned-key"
+    visible = await service.get_all(user_id, session)
+    assert len(visible) == 1
+    assert visible[0].has_value is True
+    assert visible[0].value is None
+
+
 @pytest.mark.parametrize("var_name", ["WATSONX_APIKEY", "WATSONX_PROJECT_ID"])
 async def test_initialize_user_variables__provider_variables_have_no_automatic_default_fields(
     service, session: AsyncSession, monkeypatch, var_name

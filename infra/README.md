@@ -162,6 +162,19 @@ minutes, the zone lookup resolved to the wrong zone — check the cached value i
 Open `https://langflow.nudge-platforms.com`. You are sent to Google, and on
 return Langflow creates your user on first sign-in.
 
+The service injects `OPENAI_API_KEY` from the existing Secrets Manager secret
+`langflow/prod/openai-api-key` and enables `LANGFLOW_STORE_ENVIRONMENT_VARIABLES`.
+`OPENAI_API_KEY` is already in Langflow's default environment import list.
+Startup imports it into existing users' encrypted Global Variables; new SSO
+accounts receive it on first sign-in. It should appear as a masked credential
+in Global Variables and configure OpenAI in Model Providers. Users' saved
+overrides are preserved.
+
+After enabling imports or rotating the Secrets Manager value, replace the ECS
+tasks: secrets are resolved only at task startup. Existing users also need the
+application image containing the startup backfill; changing only the task's
+environment settings is insufficient for older images.
+
 You cannot sign in as the local admin through the browser. The load balancer
 authenticates you first, `/session` then logs you in as your Google identity,
 and the frontend redirects any authenticated user away from `/login`. The

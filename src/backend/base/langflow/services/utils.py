@@ -751,6 +751,12 @@ async def initialize_services(*, fix_migration: bool = False, skip_superuser_set
         except sqlalchemy_exc.IntegrityError as exc:
             await logger.awarning(f"Error assigning orphaned flows to the superuser: {exc!s}")
 
+    # Existing SSO users bypass password login and JIT initialization. Backfill
+    # their credentials when deployment environment settings change as well.
+    from langflow.services.variable.initialization import initialize_environment_variables
+
+    await initialize_environment_variables()
+
     async with session_scope() as session:
         await clean_transactions(settings_service, session)
         await clean_vertex_builds(settings_service, session)
