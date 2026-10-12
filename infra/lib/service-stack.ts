@@ -253,6 +253,7 @@ export class ServiceStack extends Stack {
         langflowSecretKey,
         superuserPassword,
         openAiApiKey,
+        openAiApiKeyJsonField: config.openAiApiKeySecretJsonField,
         redisAuthSecret,
       }),
       entryPoint: ["/bin/sh", "-c"],
@@ -717,6 +718,7 @@ interface SecretSources {
   readonly langflowSecretKey: secretsmanager.ISecret;
   readonly superuserPassword: secretsmanager.ISecret;
   readonly openAiApiKey: secretsmanager.ISecret;
+  readonly openAiApiKeyJsonField?: string;
   readonly redisAuthSecret?: secretsmanager.ISecret;
 }
 
@@ -736,7 +738,7 @@ function buildSecrets(sources: SecretSources): Record<string, ecs.Secret> {
     DB_NAME: ecs.Secret.fromSecretsManager(sources.databaseSecret, "dbname"),
     LANGFLOW_SECRET_KEY: ecs.Secret.fromSecretsManager(sources.langflowSecretKey),
     LANGFLOW_SUPERUSER_PASSWORD: ecs.Secret.fromSecretsManager(sources.superuserPassword),
-    OPENAI_API_KEY: ecs.Secret.fromSecretsManager(sources.openAiApiKey),
+    OPENAI_API_KEY: ecs.Secret.fromSecretsManager(sources.openAiApiKey, sources.openAiApiKeyJsonField),
   };
   if (sources.redisAuthSecret) {
     secrets.REDIS_AUTH_TOKEN = ecs.Secret.fromSecretsManager(sources.redisAuthSecret);

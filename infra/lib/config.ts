@@ -38,12 +38,10 @@ export interface LangflowEnvironment {
   readonly googleClientSecretName: string;
   /** Optional JSON field inside that secret. Omit if the secret is the raw value. */
   readonly googleClientSecretJsonField?: string;
-  /**
-   * Name of the pre-existing Secrets Manager secret whose entire SecretString
-   * is the OpenAI API key. The secret is created out of band so neither the key
-   * nor a copy of it ever passes through GitHub or CloudFormation.
-   */
+  /** Name of the pre-existing Secrets Manager secret containing the OpenAI API key. */
   readonly openAiApiKeySecretName: string;
+  /** Optional JSON field inside that secret. Omit if the SecretString is the raw API key. */
+  readonly openAiApiKeySecretJsonField?: string;
   /**
    * Local superuser Langflow bootstraps with. Required whenever AUTO_LOGIN is
    * off — boot aborts with "Username and password must be set" otherwise. Its
@@ -174,6 +172,7 @@ export const environments: Record<string, LangflowEnvironment> = {
     googleClientId: process.env.LANGFLOW_GOOGLE_CLIENT_ID ?? GOOGLE_CLIENT_ID,
     googleClientSecretName: "langflow/prod/google-oauth-client-secret", // pragma: allowlist secret
     openAiApiKeySecretName: "langflow/prod/openai-api-key", // pragma: allowlist secret
+    openAiApiKeySecretJsonField: "langflow/prod/openai-api-key", // pragma: allowlist secret
     superuserUsername: "admin@nudge-labs.com",
     cognitoDomainPrefix: "nudge-labs-langflow",
     ssoSessionTimeout: Duration.hours(8),

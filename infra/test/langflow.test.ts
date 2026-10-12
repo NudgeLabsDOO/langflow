@@ -23,6 +23,7 @@ const testConfig: LangflowEnvironment = {
   googleClientId: "test-client-id.apps.googleusercontent.com",
   googleClientSecretName: "langflow/test/google-oauth-client-secret", // pragma: allowlist secret
   openAiApiKeySecretName: "langflow/test/openai-api-key", // pragma: allowlist secret
+  openAiApiKeySecretJsonField: "langflow/test/openai-api-key", // pragma: allowlist secret
   superuserUsername: "admin@nudge-labs.com",
   cognitoDomainPrefix: "nudge-labs-langflow-test",
   ssoSessionTimeout: Duration.hours(8),
@@ -363,7 +364,10 @@ describe("service", () => {
         }),
       ]),
     });
-    expect(JSON.stringify(service.toJSON())).toContain("langflow/test/openai-api-key"); // pragma: allowlist secret
+    const taskDefinition = Object.values(service.findResources("AWS::ECS::TaskDefinition"))[0] as any;
+    const container = taskDefinition.Properties.ContainerDefinitions.find((item: any) => item.Name === "langflow");
+    const openAiSecret = container.Secrets.find((item: any) => item.Name === "OPENAI_API_KEY");
+    expect(JSON.stringify(openAiSecret.ValueFrom)).toContain(":langflow/test/openai-api-key::"); // pragma: allowlist secret
     service.resourceCountIs("AWS::SecretsManager::Secret", 0);
   });
 
