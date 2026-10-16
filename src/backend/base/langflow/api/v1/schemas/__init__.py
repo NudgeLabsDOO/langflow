@@ -66,11 +66,14 @@ class RunResponse(BaseModel):
 
     outputs: list[RunOutputs] | None = []
     session_id: str | None = None
+    run_id: str | None = None
 
     @model_serializer(mode="plain")
     def serialize(self):
         # Serialize all the outputs if they are base models
         serialized = {"session_id": self.session_id, "outputs": []}
+        if self.run_id:
+            serialized["run_id"] = self.run_id
         if self.outputs:
             serialized_outputs = []
             for output in self.outputs:
@@ -358,6 +361,13 @@ class SimplifiedAPIRequest(BaseModel):
     )
     tweaks: Tweaks | None = Field(default=None, description="The tweaks")
     session_id: str | None = Field(default=None, description="The session id")
+    run_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Optional caller-chosen run id (UUID). It becomes the job id and the trace id, so the caller "
+            "can look the run up in /monitor/traces afterwards. Must be unique; a random one is used if omitted."
+        ),
+    )
     user_id: str | None = Field(
         default=None,
         description=(

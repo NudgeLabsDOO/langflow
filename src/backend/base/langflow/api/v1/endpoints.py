@@ -379,6 +379,12 @@ def validate_input_and_tweaks(input_request: SimplifiedAPIRequest) -> None:
             raise InvalidChatInputError(msg)
 
 
+async def _run_graph_with_timeout(**kwargs):
+    """Run the graph under ``workflow_execution_timeout`` so a stuck v1 run stops instead of burning tokens."""
+    timeout = get_settings_service().settings.workflow_execution_timeout
+    return await asyncio.wait_for(run_graph_internal(**kwargs), timeout=timeout)
+
+
 async def simple_run_flow(
     flow: Flow,
     input_request: SimplifiedAPIRequest,
@@ -528,7 +534,7 @@ async def simple_run_flow(
             with execution_protocol("v1"):
                 task_result, session_id = await _job_svc.execute_with_status(
                     run_id_uuid,
-                    run_graph_internal,
+                    _run_graph_with_timeout,
                     graph=graph,
                     flow_id=flow_id_str,
                     session_id=effective_session_id,
@@ -537,6 +543,13 @@ async def simple_run_flow(
                     stream=stream,
                     event_manager=event_manager,
                 )
+        except TimeoutError as exc:
+            # Raised by _run_graph_with_timeout; the job row is already TIMED_OUT.
+            await logger.aerror("Run %s of flow %s exceeded the execution timeout", run_id_uuid, flow.id)
+            raise HTTPException(
+                status_code=status.HTTP_408_REQUEST_TIMEOUT,
+                detail={"code": "EXECUTION_TIMEOUT", "run_id": str(run_id_uuid)},
+            ) from exc
         except Exception as exc:
             if isinstance(exc, HTTPException):
                 if expose_error_details:
@@ -569,7 +582,7 @@ async def simple_run_flow(
             except (RuntimeError, ValueError, OSError):
                 await logger.awarning("Memory base hook scheduling failed for flow %s", flow.id, exc_info=True)
 
-        return RunResponse(outputs=task_result, session_id=session_id)
+        return RunResponse(outputs=task_result, session_id=session_id, run_id=run_id)
 
     except sa.exc.StatementError as exc:
         raise ValueError(str(exc)) from exc
@@ -985,7 +998,7 @@ async def _run_flow_internal(
             media_type="text/event-stream",
         )
 
-    run_id = str(uuid4())
+    run_id = str(input_request.run_id or uuid4())
     try:
         result = await simple_run_flow(
             flow=flow,

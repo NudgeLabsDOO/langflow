@@ -1233,9 +1233,16 @@ class Graph:
                 event_manager=event_manager,
             )
             self.increment_run_count()
-        except (GraphPausedException, asyncio.CancelledError):
-            # Why: a HITL pause/cancel must propagate UNWRAPPED so the job/runner layer suspends the
+        except GraphPausedException:
+            # Why: a HITL pause must propagate UNWRAPPED so the job/runner layer suspends the
             # run instead of finalizing it; wrapping it as ValueError terminalizes the job (LE-1440).
+            raise
+        except asyncio.CancelledError:
+            # A cancel (run timeout, client abort) must still propagate UNWRAPPED, but the trace has to be
+            # closed first: otherwise the tokens already spent by finished LLM calls are never written.
+            # Shielded so a second cancel cannot interrupt the flush; subgraphs leave it to the parent.
+            if not self._is_subgraph:
+                await asyncio.shield(self.end_all_traces(error=RuntimeError("Run cancelled before completion")))
             raise
         except Exception as exc:
             self._end_all_traces_async(error=exc)
