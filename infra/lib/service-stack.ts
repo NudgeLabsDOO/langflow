@@ -333,7 +333,7 @@ export class ServiceStack extends Stack {
       securityGroup: props.albSecurityGroup,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       // Flow builds stream results over SSE and websockets for minutes at a time.
-      idleTimeout: Duration.seconds(600),
+      idleTimeout: Duration.seconds(1260),
       dropInvalidHeaderFields: true,
       http2Enabled: true,
       // Deliberately off. The load balancer holds no state — the DNS record and
@@ -473,6 +473,11 @@ export class ServiceStack extends Stack {
       LANGFLOW_PORT: String(LANGFLOW_CONTAINER_PORT),
       LANGFLOW_LOG_LEVEL: "INFO",
       DO_NOT_TRACK: "true",
+
+      // ------------------------------------------------------------ Runs
+      // Ceiling for one /api/v1/run, just under Nudgy's 1200 s client timeout so
+      // the caller gets a 408 and Langflow stops spending tokens.
+      LANGFLOW_WORKFLOW_EXECUTION_TIMEOUT: "1190",
 
       // ------------------------------------------------------------ Auth
       // Every request arrives already authenticated by the load balancer, so
